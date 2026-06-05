@@ -3,19 +3,17 @@
 
 import os
 
-# ── Database ──────────────────────────────────────────────────────────────────
-# Reads from environment variable or Streamlit secrets
 def get_database_url() -> str:
     """
     Priority:
-    1. DATABASE_URL environment variable (local dev / Railway / Render)
-    2. Streamlit secrets (Streamlit Cloud deployment)
-    3. SQLite fallback (demo / no-DB mode)
+    1. DATABASE_URL environment variable
+    2. Streamlit secrets [database] url
+    3. Streamlit secrets top-level DATABASE_URL
+    4. SQLite fallback
     """
     # Direct env var
     db_url = os.environ.get("DATABASE_URL", "")
     if db_url:
-        # Heroku/Railway give postgres:// but SQLAlchemy needs postgresql://
         if db_url.startswith("postgres://"):
             db_url = db_url.replace("postgres://", "postgresql://", 1)
         return db_url
@@ -23,11 +21,30 @@ def get_database_url() -> str:
     # Streamlit secrets
     try:
         import streamlit as st
-        return st.secrets["database"]["url"]
+        secrets = st.secrets
+
+        # Try [database] section with multiple key names
+        if "database" in secrets:
+            db = secrets["database"]
+            for key in ["url", "URL", "database_url", "DATABASE_URL"]:
+                if key in db:
+                    url = str(db[key])
+                    if url.startswith("postgres://"):
+                        url = url.replace("postgres://", "postgresql://", 1)
+                    return url
+
+        # Try top-level keys
+        for key in ["DATABASE_URL", "database_url", "DB_URL"]:
+            if key in secrets:
+                url = str(secrets[key])
+                if url.startswith("postgres://"):
+                    url = url.replace("postgres://", "postgresql://", 1)
+                return url
+
     except Exception:
         pass
 
-    # SQLite fallback — works with zero setup, stores data in a local file
+    # SQLite fallback
     return "sqlite:///rosteriq.db"
 
 
@@ -45,11 +62,10 @@ WEIGHTS = {
 }
 
 # ── NIL calibration ───────────────────────────────────────────────────────────
-NIL_BASE_SCALE  = 600    # Base dollar multiplier
-NIL_EXP_DIVISOR = 22     # Controls curve steepness
-NIL_HI_MULT     = 1.75   # High estimate = low × this
+NIL_BASE_SCALE  = 600
+NIL_EXP_DIVISOR = 22
+NIL_HI_MULT     = 1.75
 
-# Blue chip multipliers
 RECRUIT_MULTIPLIERS = {
     "top10":  25.0,
     "top30":  14.0,
@@ -58,13 +74,13 @@ RECRUIT_MULTIPLIERS = {
     "unranked": 1.0,
 }
 DRAFT_MULTIPLIERS = {
-    1: 18.0,   # Lottery (1-14)
-    2:  8.0,   # Late 1st (15-30)
-    3:  3.0,   # 2nd round
-    0:  1.0,   # Undrafted
+    1: 18.0,
+    2:  8.0,
+    3:  3.0,
+    0:  1.0,
 }
 
-HOUSE_CAP = 20_500_000   # 2025-26 House settlement cap
+HOUSE_CAP = 20_500_000
 
 # ── Lookup maps ───────────────────────────────────────────────────────────────
 CONF_TIER_MAP  = {"Power 4": 1, "Mid-Major": 2, "D-II / D-III / NAIA": 3}
@@ -80,4 +96,3 @@ RECRUIT_MAP    = {"Unranked": 0, "Top 300": 250, "Top 100": 75, "Top 30": 20, "T
 SPORTS   = ["Football", "Basketball", "Baseball", "Soccer", "Volleyball",
             "Track & Field", "Swimming", "Wrestling", "Other"]
 YEARS    = ["Freshman", "Sophomore", "Junior", "Senior", "Grad Transfer"]
-
